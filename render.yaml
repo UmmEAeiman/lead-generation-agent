@@ -1,0 +1,54 @@
+# Render Blueprint — backend API (FastAPI + Postgres/pgvector)
+# Deploy: Render Dashboard > New > Blueprint > connect this repo.
+# Secrets use `sync: false` -> Render prompts for them on first deploy.
+services:
+  - type: web
+    name: leadgen-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # Apply DB migrations, then start the API on Render's port.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: PYTHONIOENCODING
+        value: utf-8
+      - key: ENVIRONMENT
+        value: production
+      # Schema is created by `alembic upgrade head`, not create_all.
+      - key: AUTO_CREATE_TABLES
+        value: "false"
+      # HTTPS in production: secure first-party cookie (same-origin via the Vercel proxy).
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: lax
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: SEARCH_PROVIDER
+        value: serper
+      - key: SEARCH_GL
+        value: us
+      # --- Set these in the Render dashboard (do NOT commit real values) ---
+      # Neon: postgresql+asyncpg://USER:PASSWORD@HOST/DB?ssl=require
+      - key: DATABASE_URL
+        sync: false
+      # python -c "import secrets; print(secrets.token_urlsafe(48))"
+      - key: SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SEARCH_API_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # JSON list, e.g. ["https://your-app.vercel.app"]
+      - key: CORS_ORIGINS
+        sync: false

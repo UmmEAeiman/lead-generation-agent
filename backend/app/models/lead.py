@@ -51,6 +51,7 @@ class Lead(Base):
 
     research_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     pain_points: Mapped[list] = mapped_column(JSON, default=list)
+    buying_signals: Mapped[list] = mapped_column(JSON, default=list)
     personalized_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     field_confidence: Mapped[dict] = mapped_column(JSON, default=dict)

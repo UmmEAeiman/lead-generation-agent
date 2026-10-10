@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api/client";
+import { apiRequest, apiRequestBlob } from "@/lib/api/client";
 import type { Page } from "@/types/api";
 import type { Lead, LeadCreate, LeadFilters, LeadUpdate } from "@/types/lead";
 
@@ -51,4 +51,8 @@ export function deleteLead(leadId: string): Promise<void> {
 
 export function optOutLead(leadId: string): Promise<void> {
   return apiRequest<void>(`/api/v1/leads/${leadId}/opt-out`, { method: "POST" });
+}
+
+export function exportLeads(filters: LeadFilters = {}): Promise<Blob> {
+  return apiRequestBlob(`/api/v1/leads/export${queryString(filters)}`);
 }

@@ -1,0 +1,133 @@
+# Deployment Guide — Vercel + Render + Neon
+
+Quick-launch topology:
+
+```
+Browser ──▶ Vercel (Next.js)  ──/api/v1/* rewrite──▶  Render (FastAPI)  ──▶  Neon (Postgres + pgvector)
+```
+
+The browser talks **only to the Vercel domain**; Next.js proxies `/api/v1/*` to Render.
+This keeps the auth cookie **first-party** (no third-party-cookie blocking, no CORS issues),
+and server components call Render directly via `API_INTERNAL_URL`.
+
+Never commit `.env` files or real secrets.
+
+---
+
+## 0. Prerequisites
+
+- Accounts: [Neon](https://neon.tech), [Render](https://render.com), [Vercel](https://vercel.com)
+- Repo pushed to GitHub (this repo).
+- Provider keys ready: Groq, Serper, Resend (or leave search/email in mock/local mode).
+
+---
+
+## 1. Neon (database)
+
+1. Create a project → create a database (e.g. `leadgen`).
+2. Copy the **direct** connection string (the one *without* `-pooler`), e.g.
+   `postgresql://USER:PASSWORD@ep-xxx.region.aws.neon.tech/leadgen?sslmode=require`.
+3. Convert it for the async `asyncpg` driver:
+   ```
+   postgresql+asyncpg://USER:PASSWORD@ep-xxx.region.aws.neon.tech/leadgen?ssl=require
+   ```
+   Keep this as `DATABASE_URL`.
+4. pgvector: no manual step — the first migration runs `CREATE EXTENSION IF NOT EXISTS vector`.
+
+---
+
+## 2. Render (backend)
+
+1. **New → Blueprint**, connect this repo. Render reads `render.yaml` (service `leadgen-api`).
+2. When prompted, fill the `sync: false` secrets:
+   - `DATABASE_URL` = the Neon asyncpg URL from step 1.
+   - `SECRET_KEY` = `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+   - `GROQ_API_KEY`, `SEARCH_API_KEY`, `EMAIL_API_KEY`, `EMAIL_FROM`
+   - `CORS_ORIGINS` = `["https://<your-app>.vercel.app"]` (update after Vercel deploy)
+3. Deploy. The start command runs `alembic upgrade head` (creates all tables) then starts the API.
+4. Verify: open `https://<render-service>.onrender.com/health` → `{"status":"ok",...}`.
+5. Copy the service URL — you need it for Vercel (`API_PROXY_TARGET`, `API_INTERNAL_URL`).
+
+> Free tier sleeps after inactivity and wakes on request. Background agent runs execute
+> in-process; keep runs short. No persistent disk is needed (Postgres is external).
+
+---
+
+## 3. Vercel (frontend)
+
+1. **Add New → Project**, import this repo.
+2. **Root Directory = `frontend`** (important — this is a monorepo).
+3. Environment Variables (Production):
+   | Key | Value |
+   | --- | --- |
+   | `NEXT_PUBLIC_API_URL` | *(empty)* |
+   | `API_PROXY_TARGET` | `https://<render-service>.onrender.com` |
+   | `API_INTERNAL_URL` | `https://<render-service>.onrender.com` |
+4. Deploy. Note your URL, e.g. `https://your-app.vercel.app`.
+5. Go back to Render → set `CORS_ORIGINS` = `["https://your-app.vercel.app"]` → redeploy backend.
+
+---
+
+## 4. Verify end-to-end
+
+1. Visit the Vercel URL → **Register** a user → you should land on the dashboard (login persists).
+2. Create a lead (or run the **Discovery** agent) → **Export CSV** downloads.
+3. Queue an agent run → check the **Agents** page for status.
+4. Send a test outreach (email) — see step 6 for the sender domain.
+
+If login does not persist: confirm `NEXT_PUBLIC_API_URL` is empty and `API_PROXY_TARGET` is set,
+and that the browser is hitting `https://<vercel-domain>/api/v1/...` (not the Render URL directly).
+
+---
+
+## 5. Custom domain (recommended for client handover)
+
+Attach the client's domain to **both** services on the *same* registrable domain:
+
+- `app.clientdomain.com` → Vercel (Project → Domains)
+- `api.clientdomain.com` → Render (Service → Settings → Custom Domain)
+
+Then update:
+- Vercel: `API_PROXY_TARGET` / `API_INTERNAL_URL` = `https://api.clientdomain.com`
+- Render: `CORS_ORIGINS` = `["https://app.clientdomain.com"]`
+
+(With the proxy in place, cookies stay first-party even across the two subdomains.)
+
+---
+
+## 6. Email (Resend)
+
+- Test sender `onboarding@resend.dev` only delivers to the Resend account owner.
+- For real outreach: verify the client's domain in Resend, then set on Render:
+  `EMAIL_FROM=leads@clientdomain.com` and keep `EMAIL_PROVIDER=resend`.
+
+---
+
+## 7. Security checklist
+
+- [ ] Rotate any keys that were ever shared in plaintext; put new ones only in Render/Vercel.
+- [ ] `SECRET_KEY` is a fresh 48-byte value (never the default).
+- [ ] `.env` / `.env.local` are gitignored and not committed.
+- [ ] `AUTO_CREATE_TABLES=false` in production (migrations own the schema).
+- [ ] `COOKIE_SECURE=true`.
+
+---
+
+## 8. Redeploys & migrations
+
+- Render redeploys run `alembic upgrade head` automatically before start.
+- New migration: locally `alembic revision --autogenerate -m "..."`, commit, push, redeploy.
+- Rollback: `alembic downgrade -1` (run via a Render shell).
+
+---
+
+## Local equivalent
+
+```powershell
+# backend
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+# frontend (proxies /api/v1 -> API_PROXY_TARGET, default http://localhost:8001)
+cd frontend
+npm run dev
+```

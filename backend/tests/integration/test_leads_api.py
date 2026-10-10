@@ -90,3 +90,21 @@ def test_similar_lead_search(authed) -> None:
     response = authed.get("/api/v1/leads/search", params={"q": "orthodontic care"})
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def test_export_leads_csv(authed) -> None:
+    authed.post(
+        "/api/v1/leads",
+        json={
+            "company_name": "CSV Export Co",
+            "industry": "Retail",
+            "email": "csv@export.example.com",
+        },
+    )
+    response = authed.get("/api/v1/leads/export", params={"q": "CSV Export"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in response.headers["content-disposition"]
+    body = response.content.decode("utf-8-sig")
+    assert "company_name" in body
+    assert "CSV Export Co" in body

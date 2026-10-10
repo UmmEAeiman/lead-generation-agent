@@ -1,6 +1,8 @@
 import type { ApiErrorBody } from "@/types/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Empty base => same-origin requests, proxied to the backend by the /api/v1 rewrite
+// in next.config.ts. Set NEXT_PUBLIC_API_URL to call an absolute backend URL instead.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export class ApiRequestError extends Error {
   readonly code: string;
@@ -76,4 +78,46 @@ export function getErrorMessage(error: unknown, fallback = "Something went wrong
   if (error instanceof ApiRequestError) return error.message;
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+export async function apiRequestBlob(
+  path: string,
+  options: RequestInit = {},
+): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(path), {
+      ...options,
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiRequestError(
+      "NETWORK_ERROR",
+      "Could not reach the server. Is the backend running?",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+    }
+    const body = payload as ApiErrorBody | null;
+    const code = body?.error?.code ?? `HTTP_${response.status}`;
+    const message =
+      body?.error?.message ??
+      (response.status === 401
+        ? "Your session has expired. Please sign in again."
+        : "Request failed. Please try again.");
+    throw new ApiRequestError(code, message, response.status);
+  }
+
+  return response.blob();
 }

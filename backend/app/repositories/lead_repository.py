@@ -102,6 +102,34 @@ class LeadRepository:
         items = list((await self.session.execute(ordered)).scalars().all())
         return items, total
 
+    async def export_all(
+        self,
+        owner_id: UUID,
+        *,
+        q: str | None = None,
+        status: str | None = None,
+        industry: str | None = None,
+        location: str | None = None,
+        score_min: int | None = None,
+        score_max: int | None = None,
+        sort: str = "created_at",
+        order: str = "desc",
+        limit: int = 10_000,
+    ) -> list[Lead]:
+        stmt = self._filtered(
+            owner_id,
+            q=q,
+            status=status,
+            industry=industry,
+            location=location,
+            score_min=score_min,
+            score_max=score_max,
+        )
+        column = _SORTABLE.get(sort, Lead.created_at)
+        ordered = stmt.order_by(column.desc() if order.lower() == "desc" else column.asc())
+        ordered = ordered.limit(limit)
+        return list((await self.session.execute(ordered)).scalars().all())
+
     async def find_duplicate(
         self,
         owner_id: UUID,

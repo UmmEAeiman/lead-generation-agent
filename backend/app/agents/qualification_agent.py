@@ -1,5 +1,6 @@
 """Qualification Agent: explicit, configurable scoring (0-100)."""
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -58,6 +59,65 @@ def _sizes_overlap(left: Any, right: Any) -> bool:
     return str(left).strip().lower() == str(right).strip().lower()
 
 
+_LOCATION_ALIASES: tuple[set[str], ...] = (
+    {
+        "uae",
+        "u a e",
+        "united arab emirates",
+        "dubai",
+        "abu dhabi",
+        "sharjah",
+        "ajman",
+        "ras al khaimah",
+        "fujairah",
+        "umm al quwain",
+        "emirates",
+    },
+    {"uk", "united kingdom", "england", "scotland", "wales", "london"},
+    {"usa", "u s a", "united states", "america"},
+    {"ksa", "saudi arabia", "riyadh", "jeddah"},
+)
+
+_STOPWORDS = {
+    "and", "the", "of", "for", "in", "on", "at", "a", "an", "e",
+    "store", "shop", "online", "ecommerce", "commerce", "company",
+    "co", "llc", "ltd", "inc", "group", "agent", "agency",
+}
+
+
+def _normalize(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+
+def _tokens(value: Any) -> set[str]:
+    return {token for token in _normalize(value).split() if token and token not in _STOPWORDS}
+
+
+def _location_match(left: Any, right: Any) -> bool:
+    a = _normalize(left)
+    b = _normalize(right)
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    if _tokens(left) & _tokens(right):
+        return True
+    return any(
+        any(alias in a for alias in group) and any(alias in b for alias in group)
+        for group in _LOCATION_ALIASES
+    )
+
+
+def _industry_match(left: Any, right: Any) -> bool:
+    a = _normalize(left)
+    b = _normalize(right)
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    return bool(_tokens(left) & _tokens(right))
+
+
 def score_lead(
     lead: dict[str, Any],
     icp: dict[str, Any],
@@ -76,9 +136,7 @@ def score_lead(
 
     # Industry fit (20)
     if industry_target:
-        matched = _contains(lead.get("industry"), industry_target) or _contains(
-            industry_target, lead.get("industry")
-        )
+        matched = _industry_match(lead.get("industry"), industry_target)
         breakdown["industry_fit"] = criteria.industry_fit if matched else 0
         reasons.append(
             f"Industry '{lead.get('industry') or 'unknown'}' vs ICP "
@@ -92,7 +150,7 @@ def score_lead(
     # ICP fit (25): location 15 + keyword relevance 10
     icp_fit = 0
     if location_target:
-        location_match = _contains(lead.get("location"), location_target)
+        location_match = _location_match(lead.get("location"), location_target)
         icp_fit += 15 if location_match else 0
         reasons.append(
             f"Location '{lead.get('location') or 'unknown'}': "

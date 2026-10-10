@@ -1,5 +1,7 @@
 """Lead business logic. All persistence goes through LeadRepository."""
 
+import csv
+import io
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,37 @@ from app.repositories.lead_repository import LeadRepository
 from app.schemas.lead import LeadCreate, LeadUpdate
 from app.utils.normalization import normalize_domain, normalize_email, normalize_url
 from app.utils.validators import can_transition
+
+_EXPORT_COLUMNS = (
+    "id",
+    "company_name",
+    "website",
+    "industry",
+    "location",
+    "company_size",
+    "contact_name",
+    "contact_role",
+    "email",
+    "phone",
+    "linkedin_url",
+    "lead_score",
+    "qualification",
+    "status",
+    "followup_state",
+    "source",
+    "source_url",
+    "description",
+    "created_at",
+    "updated_at",
+)
+
+
+def _csv_cell(value: object) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "value"):
+        return str(value.value)
+    return str(value)
 
 
 class LeadService:
@@ -72,6 +105,17 @@ class LeadService:
         requested = filters.pop("page_size", settings.page_size_default)
         page_size = min(requested, settings.page_size_max)
         return await self.repo.list(owner_id, page=page, page_size=page_size, **filters)
+
+    async def export_csv(self, owner_id: UUID, **filters) -> str:
+        filters.pop("page", None)
+        filters.pop("page_size", None)
+        leads = await self.repo.export_all(owner_id, **filters)
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(_EXPORT_COLUMNS)
+        for lead in leads:
+            writer.writerow([_csv_cell(getattr(lead, column, None)) for column in _EXPORT_COLUMNS])
+        return buffer.getvalue()
 
     async def get(self, owner_id: UUID, lead_id: UUID) -> Lead:
         lead = await self.repo.get_by_id(lead_id, owner_id)

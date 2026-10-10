@@ -21,6 +21,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useLeads } from "@/hooks/useLeads";
 import { queueRun } from "@/lib/api/agents";
 import { getErrorMessage } from "@/lib/api/client";
+import { exportLeads } from "@/lib/api/leads";
 import { LEAD_STATUSES, LEAD_STATUS_META, QUALIFICATION_META } from "@/lib/statusMeta";
 import type { AgentType } from "@/types/agent";
 import type { Lead, LeadFilters, LeadStatus } from "@/types/lead";
@@ -55,6 +56,7 @@ export function LeadsView({ initialQuery = "" }: { initialQuery?: string }) {
     null,
   );
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
 
   const debouncedQuery = useDebounce(query);
   const debouncedIndustry = useDebounce(industry);
@@ -122,7 +124,14 @@ export function LeadsView({ initialQuery = "" }: { initialQuery?: string }) {
     setBulkBusy(true);
     setBanner(null);
     try {
-      const run = await queueRun(agentType, { lead_ids: Array.from(selected) });
+      const run = await queueRun(agentType, {
+        lead_ids: Array.from(selected),
+        icp: {
+          industry: industry.trim() || undefined,
+          location: location.trim() || undefined,
+          keywords: query.trim() ? [query.trim()] : undefined,
+        },
+      });
       setBanner({
         kind: "success",
         text: `${agentType} run queued (${run.run_id}). Track it on the Agents page.`,
@@ -132,6 +141,28 @@ export function LeadsView({ initialQuery = "" }: { initialQuery?: string }) {
       setBanner({ kind: "error", text: getErrorMessage(err) });
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function handleExport() {
+    if (exportBusy) return;
+    setExportBusy(true);
+    setBanner(null);
+    try {
+      const blob = await exportLeads(filters);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setBanner({ kind: "success", text: "Leads exported to CSV." });
+    } catch (err) {
+      setBanner({ kind: "error", text: getErrorMessage(err) });
+    } finally {
+      setExportBusy(false);
     }
   }
 
@@ -228,13 +259,17 @@ export function LeadsView({ initialQuery = "" }: { initialQuery?: string }) {
               onSelect: () => void runBulk(agent.id),
             }))}
           />
+          <Button variant="secondary" loading={exportBusy} onClick={() => void handleExport()}>
+            Export CSV
+          </Button>
           <Button onClick={() => setFormOpen(true)}>New lead</Button>
         </div>
       </div>
 
       {selected.size > 0 ? (
         <p className="rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
-          {selected.size} lead{selected.size === 1 ? "" : "s"} selected
+          {selected.size} lead{selected.size === 1 ? "" : "s"} selected. Industry, Location and
+          Search filters are used as the ICP when you run an agent.
         </p>
       ) : null}
 

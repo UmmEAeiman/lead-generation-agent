@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.core.dependencies import CurrentUserDep, SessionDep
 from app.schemas.common import Page
@@ -56,6 +57,38 @@ async def similar_leads(
 ) -> list[LeadOut]:
     leads = await LeadService(session).similar(user.id, q, limit=limit)
     return [LeadOut.model_validate(lead) for lead in leads]
+
+
+@router.get("/export")
+async def export_leads(
+    session: SessionDep,
+    user: CurrentUserDep,
+    q: str | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    industry: str | None = None,
+    location: str | None = None,
+    score_min: int | None = None,
+    score_max: int | None = None,
+    sort: str = "created_at",
+    order: str = "desc",
+) -> Response:
+    csv_text = await LeadService(session).export_csv(
+        user.id,
+        q=q,
+        status=status_filter,
+        industry=industry,
+        location=location,
+        score_min=score_min,
+        score_max=score_max,
+        sort=sort,
+        order=order,
+    )
+    filename = f"leads-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.csv"
+    return Response(
+        content="\ufeff" + csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("", response_model=LeadOut, status_code=status.HTTP_201_CREATED)

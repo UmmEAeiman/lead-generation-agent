@@ -22,6 +22,7 @@ from app.models.agent_run import AgentRun
 from app.models.enums import AgentRunStatus, AgentType, LeadStatus
 from app.models.lead import Lead
 from app.repositories.agent_repository import AgentRepository
+from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.lead_repository import LeadRepository
 from app.utils.helpers import compact_summary
 from app.utils.normalization import normalize_domain, normalize_email
@@ -37,6 +38,7 @@ class Orchestrator:
         self.session = session
         self.leads = LeadRepository(session)
         self.runs = AgentRepository(session)
+        self.campaigns = CampaignRepository(session)
         self.discovery = DiscoveryAgent()
         self.enrichment = EnrichmentAgent()
         self.research = ResearchAgent()
@@ -125,6 +127,20 @@ class Orchestrator:
         icp = run.input_summary.get("icp") or {}
         return icp if isinstance(icp, dict) else {}
 
+    async def _campaign_icp(self, owner_id: UUID, lead: Lead) -> dict:
+        """Fallback ICP from the lead's campaign when a run supplies none."""
+        if not lead.campaign_id:
+            return {}
+        campaign = await self.campaigns.get_by_id(lead.campaign_id, owner_id)
+        if campaign is None:
+            return {}
+        return {
+            "industry": campaign.target_industry,
+            "location": campaign.target_location,
+            "company_size": campaign.target_company_size,
+            "keywords": list(campaign.keywords or []),
+        }
+
     async def _target_leads(self, run: AgentRun) -> list[Lead]:
         owner_id = self._owner(run)
         lead_ids = self._lead_ids(run)
@@ -175,7 +191,7 @@ class Orchestrator:
             step += 1
             await self._set_progress(run, 15 + int(45 * step / total_steps))
         for lead in leads:
-            await self._qualify_lead(lead, icp)
+            await self._qualify_lead(run, lead, icp)
             step += 1
             await self._set_progress(run, 15 + int(55 * step / total_steps))
         for lead in leads:
@@ -217,7 +233,7 @@ class Orchestrator:
             elif agent_type == AgentType.RESEARCH.value:
                 await self._research_lead(lead, icp)
             elif agent_type == AgentType.QUALIFICATION.value:
-                await self._qualify_lead(lead, icp)
+                await self._qualify_lead(run, lead, icp)
             elif agent_type == AgentType.PERSONALIZATION.value:
                 await self._personalize_lead(lead)
             elif agent_type == AgentType.FOLLOWUP.value:
@@ -328,17 +344,19 @@ class Orchestrator:
             {
                 "research_summary": result.summary,
                 "pain_points": result.pain_points,
+                "buying_signals": result.buying_signals,
             },
         )
         await self.session.commit()
 
-    async def _qualify_lead(self, lead: Lead, icp: dict) -> None:
+    async def _qualify_lead(self, run: AgentRun, lead: Lead, icp: dict) -> None:
+        effective_icp = icp or await self._campaign_icp(self._owner(run), lead)
         research = {
             "pain_points": lead.pain_points or [],
-            "buying_signals": [],
+            "buying_signals": list(lead.buying_signals or []),
             "summary": lead.research_summary or "",
         }
-        result = await self.qualification.run(self._lead_dict(lead), icp, research)
+        result = await self.qualification.run(self._lead_dict(lead), effective_icp, research)
         updates = {
             "lead_score": result.score,
             "qualification": result.category,

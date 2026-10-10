@@ -47,6 +47,7 @@ export interface Lead {
   followup_state: FollowupState | null;
   research_summary: string | null;
   pain_points: string[];
+  buying_signals: string[];
   personalized_message: string | null;
   field_confidence: Record<string, DataConfidence | string>;
   created_at: string;

@@ -61,3 +61,33 @@ def test_score_never_exceeds_100() -> None:
     research = {"buying_signals": ["s1", "s2", "s3", "s4"], "pain_points": ["p1"]}
     result = score_lead(lead, icp, research)
     assert result.score <= 100
+
+
+def test_location_alias_matches_same_region() -> None:
+    lead = {
+        "company_name": "Gulf Store",
+        "industry": "E-commerce",
+        "location": "Dubai, United Arab Emirates",
+    }
+    icp = {"industry": "E commerce", "location": "UAE", "keywords": ["Gulf"]}
+    result = score_lead(lead, icp, {})
+    # Location (15) via UAE/Dubai alias + keyword relevance (10).
+    assert result.breakdown["icp_fit"] == 25
+    assert result.breakdown["industry_fit"] == 20
+
+
+def test_buying_signals_from_research_are_scored() -> None:
+    result = score_lead(
+        {"company_name": "Acme"},
+        icp={},
+        research={"buying_signals": ["raised funding", "hiring"], "pain_points": ["slow support"]},
+    )
+    assert result.breakdown["buying_signal"] == 20
+    assert result.breakdown["pain_point"] == 10
+
+
+def test_industry_synonym_tokens_match() -> None:
+    lead = {"company_name": "Prop Co", "industry": "Real Estate Agency"}
+    icp = {"industry": "Real Estate Agent"}
+    result = score_lead(lead, icp, {})
+    assert result.breakdown["industry_fit"] == 20

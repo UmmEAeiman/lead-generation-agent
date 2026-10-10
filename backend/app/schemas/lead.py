@@ -77,6 +77,7 @@ class LeadOut(BaseModel):
     followup_state: FollowupState | None = None
     research_summary: str | None = None
     pain_points: list[str] = []
+    buying_signals: list[str] = []
     personalized_message: str | None = None
     field_confidence: dict[str, DataConfidence | str] = {}
     created_at: datetime
