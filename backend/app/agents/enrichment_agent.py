@@ -4,6 +4,9 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.agents.results import EnrichmentResult
+from app.integrations.email_finder.base import EmailFinderError, EmailFinderProvider
+from app.integrations.email_finder.factory import get_email_finder
+from app.integrations.llm.base import BaseLLMProvider
 from app.models.enums import DataConfidence
 from app.prompts import enrichment as prompt
 from app.utils.normalization import normalize_domain, normalize_email, normalize_url
@@ -23,6 +26,14 @@ _ENRICHABLE_FIELDS = (
 
 class EnrichmentAgent(BaseAgent):
     name = "enrichment"
+
+    def __init__(
+        self,
+        llm: BaseLLMProvider | None = None,
+        email_finder: EmailFinderProvider | None = None,
+    ) -> None:
+        super().__init__(llm)
+        self.email_finder = email_finder or get_email_finder()
 
     async def run(self, lead: dict[str, Any], context: str = "") -> EnrichmentResult:
         fields = dict(lead)
@@ -46,6 +57,8 @@ class EnrichmentAgent(BaseAgent):
             if normalized:
                 fields["email"] = normalized
                 confidence["email"] = DataConfidence.VERIFIED.value
+        if not fields.get("email"):
+            await self._find_email(fields, confidence)
         if not fields.get("industry") and context:
             confidence.setdefault("industry", DataConfidence.UNKNOWN.value)
 
@@ -79,3 +92,34 @@ class EnrichmentAgent(BaseAgent):
             used_llm = True
 
         return EnrichmentResult(fields=fields, field_confidence=confidence, used_llm=used_llm)
+
+    async def _find_email(self, fields: dict[str, Any], confidence: dict[str, str]) -> None:
+        """Look up a contact email via the configured finder (never invent one)."""
+        if not self.email_finder.is_configured:
+            return
+        domain = normalize_domain(str(fields.get("website") or ""))
+        if not domain:
+            return
+        first_name, last_name = self._split_name(fields.get("contact_name"))
+        try:
+            found = await self.email_finder.find_email(
+                domain=domain, first_name=first_name, last_name=last_name
+            )
+        except EmailFinderError:
+            return
+        if found is None:
+            return
+        normalized = normalize_email(found.email)
+        if not normalized:
+            return
+        fields["email"] = normalized
+        confidence["email"] = found.confidence
+
+    @staticmethod
+    def _split_name(name: Any) -> tuple[str | None, str | None]:
+        parts = str(name or "").split()
+        if not parts:
+            return None, None
+        if len(parts) == 1:
+            return parts[0], None
+        return parts[0], parts[-1]

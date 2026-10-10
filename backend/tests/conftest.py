@@ -16,6 +16,9 @@ os.environ["SEARCH_PROVIDER"] = "mock"
 os.environ["SEARCH_API_KEY"] = ""
 os.environ["EMAIL_PROVIDER"] = "local"
 os.environ["EMAIL_API_KEY"] = ""
+os.environ["EMAIL_FINDER_PROVIDER"] = "hunter"
+os.environ["HUNTER_API_KEY"] = ""
+os.environ["ENRICH_API_KEY"] = ""
 
 import pytest
 from fastapi.testclient import TestClient

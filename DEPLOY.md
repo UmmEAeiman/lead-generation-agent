@@ -43,6 +43,7 @@ Never commit `.env` files or real secrets.
    - `DATABASE_URL` = the Neon asyncpg URL from step 1.
    - `SECRET_KEY` = `python -c "import secrets; print(secrets.token_urlsafe(48))"`
    - `GROQ_API_KEY`, `SEARCH_API_KEY`, `EMAIL_API_KEY`, `EMAIL_FROM`
+   - `HUNTER_API_KEY` (optional — enables contact email lookup; leave unset to disable)
    - `CORS_ORIGINS` = `["https://<your-app>.vercel.app"]` (update after Vercel deploy)
 3. Deploy. The start command runs `alembic upgrade head` (creates all tables) then starts the API.
 4. Verify: open `https://<render-service>.onrender.com/health` → `{"status":"ok",...}`.
@@ -100,6 +101,19 @@ Then update:
 - Test sender `onboarding@resend.dev` only delivers to the Resend account owner.
 - For real outreach: verify the client's domain in Resend, then set on Render:
   `EMAIL_FROM=leads@clientdomain.com` and keep `EMAIL_PROVIDER=resend`.
+
+---
+
+## 6b. Contact email lookup (Hunter.io / Enrich.so)
+
+- During enrichment, leads that have a **website but no email** are looked up.
+  Pick a provider with `EMAIL_FINDER_PROVIDER=hunter|enrich`.
+- **Hunter.io** (`HUNTER_API_KEY`): domain search, or email finder when a contact
+  name exists. Free plan ~50 credits/month.
+- **Enrich.so** (`ENRICH_API_KEY`): email finder only — needs a first + last name.
+  Costs 10 credits per found email (100 free credits ≈ 10 lookups).
+- Without the matching key, email finding is skipped — the app never invents an
+  address. Emails found are stored with confidence `verified` or `unverified`.
 
 ---
 

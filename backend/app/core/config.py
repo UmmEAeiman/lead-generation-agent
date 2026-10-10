@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     email_from_name: str = "AI Lead Generation"
     email_timeout_seconds: float = 30.0
 
+    # Email finder / contact enrichment ("hunter" | "enrich"; needs matching key)
+    email_finder_provider: str = "hunter"
+    hunter_api_key: str | None = None
+    hunter_base_url: str = "https://api.hunter.io/v2"
+    hunter_timeout_seconds: float = 20.0
+    enrich_api_key: str | None = None
+    enrich_base_url: str = "https://dev.enrich.so"
+    enrich_timeout_seconds: float = 20.0
+
     crm_api_key: str | None = None
 
     embedding_dim: int = 1024
@@ -74,6 +83,14 @@ class Settings(BaseSettings):
     @property
     def email_configured(self) -> bool:
         return self.email_provider == "resend" and bool(self.email_api_key)
+
+    @property
+    def email_finder_configured(self) -> bool:
+        if self.email_finder_provider == "hunter":
+            return bool(self.hunter_api_key)
+        if self.email_finder_provider == "enrich":
+            return bool(self.enrich_api_key)
+        return False
 
 
 @lru_cache

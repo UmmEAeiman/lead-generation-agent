@@ -49,6 +49,14 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      # Email finder (contact enrichment). Provider: hunter | enrich.
+      # Leave the matching API key unset to disable email finding.
+      - key: EMAIL_FINDER_PROVIDER
+        value: enrich
+      - key: ENRICH_API_KEY
+        sync: false
+      - key: HUNTER_API_KEY
+        sync: false
       # JSON list, e.g. ["https://your-app.vercel.app"]
       - key: CORS_ORIGINS
         sync: false
