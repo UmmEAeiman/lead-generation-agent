@@ -1,5 +1,7 @@
 """Lead business logic. All persistence goes through LeadRepository."""
 
+from __future__ import annotations
+
 import csv
 import io
 from uuid import UUID

@@ -1,5 +1,7 @@
 """Agent run orchestration service: queue runs and track their state."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from fastapi import BackgroundTasks
