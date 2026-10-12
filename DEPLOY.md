@@ -141,6 +141,20 @@ Two live providers are supported; set `EMAIL_PROVIDER` to pick one.
 
 ---
 
+## 6d. One-click pipeline & auto outreach drafts
+
+- On the Agents page, choose **Full pipeline** and enable
+  **"Auto-create outreach drafts for qualified leads"** (on by default). The
+  run request sets `prepare_outreach: true`.
+- At the end of the pipeline the backend creates an outreach draft
+  (`PENDING_APPROVAL`) for every qualified lead that has an email, skipping
+  `DO_NOT_CONTACT` / opted-out leads and leads that already have an active or
+  sent outreach. The count is returned as `output_summary.outreach_drafts`.
+- Drafts are **never auto-sent**: a human must still approve and send each one
+  (see constitution §36, Outreach Safety).
+
+---
+
 ## 7. Security checklist
 
 - [ ] Rotate any keys that were ever shared in plaintext; put new ones only in Render/Vercel.
