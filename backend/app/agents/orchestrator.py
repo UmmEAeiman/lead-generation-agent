@@ -4,6 +4,7 @@ Coordinates only — each agent remains an independently testable module and all
 database access goes through repositories.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -15,6 +16,12 @@ from app.agents.followup_agent import FollowupAgent, state_from_lead_status
 from app.agents.personalization_agent import PersonalizationAgent
 from app.agents.qualification_agent import QualificationAgent
 from app.agents.research_agent import ResearchAgent
+from app.agents.results import (
+    EnrichmentResult,
+    PersonalizationResult,
+    QualificationResult,
+    ResearchResult,
+)
 from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.integrations.llm.embeddings import embed_lead_text
@@ -31,6 +38,11 @@ from app.utils.validators import can_transition
 logger = get_logger(__name__)
 
 MAX_LEADS_PER_RUN = 50
+DEFAULT_DISCOVERY_LIMIT = 20
+# Per-lead agent work (LLM + network) runs concurrently within a stage; the
+# database writes stay serial on the shared session. Kept modest to respect
+# provider rate limits.
+_PIPELINE_CONCURRENCY = 3
 
 
 class Orchestrator:
@@ -127,6 +139,14 @@ class Orchestrator:
         icp = run.input_summary.get("icp") or {}
         return icp if isinstance(icp, dict) else {}
 
+    def _limit(self, run: AgentRun) -> int:
+        """Manual per-run capacity; falls back to the default discovery limit."""
+        try:
+            value = int(self._input(run).get("limit"))
+        except (TypeError, ValueError):
+            return DEFAULT_DISCOVERY_LIMIT
+        return max(1, min(value, MAX_LEADS_PER_RUN))
+
     async def _campaign_icp(self, owner_id: UUID, lead: Lead) -> dict:
         """Fallback ICP from the lead's campaign when a run supplies none."""
         if not lead.campaign_id:
@@ -154,7 +174,7 @@ class Orchestrator:
 
         discovered_ids: list[str] = []
         if not self._lead_ids(run):
-            discovery = await self.discovery.run(icp, limit=min(MAX_LEADS_PER_RUN, 20))
+            discovery = await self.discovery.run(icp, limit=self._limit(run))
             await self._set_progress(run, 15)
             created, duplicates = await self._persist_discovered(
                 owner_id, discovery.leads, run
@@ -182,22 +202,33 @@ class Orchestrator:
         total_steps = len(leads) * 4
         step = 0
 
-        for lead in leads:
-            await self._enrich_lead(lead, icp)
-            step += 1
-            await self._set_progress(run, 15 + int(35 * step / total_steps))
-        for lead in leads:
-            await self._research_lead(lead, icp)
-            step += 1
-            await self._set_progress(run, 15 + int(45 * step / total_steps))
-        for lead in leads:
-            await self._qualify_lead(run, lead, icp)
-            step += 1
-            await self._set_progress(run, 15 + int(55 * step / total_steps))
-        for lead in leads:
-            await self._personalize_lead(lead)
-            step += 1
-            await self._set_progress(run, 15 + int(75 * step / total_steps))
+        async def run_stage(compute, apply, weight: int) -> None:
+            nonlocal step
+            for lead, result in await self._gather(leads, compute):
+                await apply(lead, result)
+                step += 1
+                await self._set_progress(run, 15 + int(weight * step / total_steps))
+
+        await run_stage(
+            lambda lead: self._compute_enrichment(lead, icp),
+            self._apply_enrichment,
+            35,
+        )
+        await run_stage(
+            lambda lead: self._compute_research(lead, icp),
+            self._apply_research,
+            45,
+        )
+        await run_stage(
+            lambda lead: self._compute_qualification(lead, icp),
+            self._apply_qualification,
+            55,
+        )
+        await run_stage(
+            lambda lead: self._compute_personalization(lead),
+            self._apply_personalization,
+            75,
+        )
 
         output["processed"] = len(leads)
         output["qualified"] = sum(
@@ -210,7 +241,7 @@ class Orchestrator:
         icp = self._icp(run)
 
         if agent_type == AgentType.DISCOVERY.value:
-            discovery = await self.discovery.run(icp, limit=min(MAX_LEADS_PER_RUN, 20))
+            discovery = await self.discovery.run(icp, limit=self._limit(run))
             created, duplicates = await self._persist_discovered(
                 owner_id, discovery.leads, run
             )
@@ -302,14 +333,29 @@ class Orchestrator:
         )
         return created, duplicates
 
+    async def _gather(self, leads: list[Lead], compute) -> list[tuple[Lead, object]]:
+        """Run per-lead agent work concurrently, keeping DB writes serial."""
+        semaphore = asyncio.Semaphore(_PIPELINE_CONCURRENCY)
+
+        async def worker(lead: Lead) -> tuple[Lead, object]:
+            async with semaphore:
+                return lead, await compute(lead)
+
+        return list(await asyncio.gather(*(worker(lead) for lead in leads)))
+
     async def _enrich_lead(self, lead: Lead, icp: dict) -> None:
+        result = await self._compute_enrichment(lead, icp)
+        await self._apply_enrichment(lead, result)
+
+    async def _compute_enrichment(self, lead: Lead, icp: dict) -> EnrichmentResult:
+        context = f"ICP: {compact_summary(icp, 300)}"
+        return await self.enrichment.run(self._lead_dict(lead), context=context)
+
+    async def _apply_enrichment(self, lead: Lead, result: EnrichmentResult) -> None:
         if lead.status == LeadStatus.NEW.value:
             if can_transition(lead.status, LeadStatus.ENRICHING.value):
                 lead.status = LeadStatus.ENRICHING.value
                 await self.session.flush()
-        lead_data = self._lead_dict(lead)
-        context = f"ICP: {compact_summary(icp, 300)}"
-        result = await self.enrichment.run(lead_data, context=context)
         updates: dict = {}
         for field, value in result.fields.items():
             if field in {"website_domain"} or not hasattr(lead, field):
@@ -337,8 +383,14 @@ class Orchestrator:
         await self.session.commit()
 
     async def _research_lead(self, lead: Lead, icp: dict) -> None:
+        result = await self._compute_research(lead, icp)
+        await self._apply_research(lead, result)
+
+    async def _compute_research(self, lead: Lead, icp: dict) -> ResearchResult:
         context = f"ICP: {compact_summary(icp, 300)}"
-        result = await self.research.run(self._lead_dict(lead), context=context)
+        return await self.research.run(self._lead_dict(lead), context=context)
+
+    async def _apply_research(self, lead: Lead, result: ResearchResult) -> None:
         await self.leads.apply(
             lead,
             {
@@ -351,12 +403,18 @@ class Orchestrator:
 
     async def _qualify_lead(self, run: AgentRun, lead: Lead, icp: dict) -> None:
         effective_icp = icp or await self._campaign_icp(self._owner(run), lead)
+        result = await self._compute_qualification(lead, effective_icp)
+        await self._apply_qualification(lead, result)
+
+    async def _compute_qualification(self, lead: Lead, icp: dict) -> QualificationResult:
         research = {
             "pain_points": lead.pain_points or [],
             "buying_signals": list(lead.buying_signals or []),
             "summary": lead.research_summary or "",
         }
-        result = await self.qualification.run(self._lead_dict(lead), effective_icp, research)
+        return await self.qualification.run(self._lead_dict(lead), icp, research)
+
+    async def _apply_qualification(self, lead: Lead, result: QualificationResult) -> None:
         updates = {
             "lead_score": result.score,
             "qualification": result.category,
@@ -373,13 +431,23 @@ class Orchestrator:
         await self.session.commit()
 
     async def _personalize_lead(self, lead: Lead) -> None:
+        result = await self._compute_personalization(lead)
+        await self._apply_personalization(lead, result)
+
+    async def _compute_personalization(self, lead: Lead) -> PersonalizationResult | None:
         if lead.status == LeadStatus.DO_NOT_CONTACT.value:
-            return
-        result = await self.personalization.run(
+            return None
+        return await self.personalization.run(
             self._lead_dict(lead),
             research_summary=lead.research_summary or "",
             pain_points=list(lead.pain_points or []),
         )
+
+    async def _apply_personalization(
+        self, lead: Lead, result: PersonalizationResult | None
+    ) -> None:
+        if result is None:
+            return
         await self.leads.apply(lead, {"personalized_message": result.message})
         await self.session.commit()
 

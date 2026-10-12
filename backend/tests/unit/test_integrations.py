@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.integrations.email.base import EmailProviderError
 from app.integrations.email.factory import get_email_provider
 from app.integrations.email.resend import ResendEmailProvider
+from app.integrations.email.smtp import SmtpEmailProvider
 from app.integrations.email_finder.base import EmailFinderError, FoundEmail
 from app.integrations.email_finder.enrich import EnrichEmailFinder
 from app.integrations.email_finder.factory import get_email_finder
@@ -135,6 +136,67 @@ async def test_resend_http_error_raises(monkeypatch):
         raise AssertionError("expected EmailProviderError")
 
 
+async def test_smtp_sends_email(monkeypatch):
+    sent: dict[str, object] = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None):
+            sent["host"] = host
+            sent["port"] = port
+
+        def ehlo(self):
+            pass
+
+        def starttls(self):
+            sent["starttls"] = True
+
+        def login(self, user, password):
+            sent["login"] = (user, password)
+
+        def send_message(self, message):
+            sent["message"] = message
+
+        def quit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.integrations.email.smtp.smtplib.SMTP", FakeSMTP)
+
+    provider = SmtpEmailProvider(
+        host="smtp.example.com",
+        port=587,
+        username="user",
+        password="secret",
+        sender="sender@example.com",
+        sender_name="LeadGen",
+        use_tls=True,
+    )
+
+    message_id = await provider.send_email(to="lead@example.com", subject="Hi", body="Hello")
+
+    assert message_id
+    assert sent["host"] == "smtp.example.com"
+    assert sent["port"] == 587
+    assert sent["starttls"] is True
+    assert sent["login"] == ("user", "secret")
+    message = sent["message"]
+    assert message["To"] == "lead@example.com"
+    assert message["Subject"] == "Hi"
+    assert "sender@example.com" in message["From"]
+
+
+async def test_smtp_missing_config_raises():
+    provider = SmtpEmailProvider(host="")
+    try:
+        await provider.send_email(to="lead@example.com", subject="Hi", body="Hello")
+    except EmailProviderError:
+        pass
+    else:  # pragma: no cover - guard
+        raise AssertionError("expected EmailProviderError")
+
+
 def test_factories_fall_back_to_local_and_mock():
     assert settings.email_provider == "local"
     assert settings.search_provider == "mock"
@@ -150,6 +212,14 @@ def test_factories_select_live_providers_when_configured(monkeypatch):
 
     assert get_email_provider().name == "resend"
     assert get_search_provider().name == "serper"
+
+
+def test_factory_selects_smtp_when_configured(monkeypatch):
+    monkeypatch.setattr(settings, "email_provider", "smtp")
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "email_from", "sender@example.com")
+
+    assert get_email_provider().name == "smtp"
 
 
 def _patch_get(monkeypatch, response_json, status_code=200):

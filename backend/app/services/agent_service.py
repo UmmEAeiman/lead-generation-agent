@@ -48,6 +48,7 @@ class AgentService:
         icp: dict | None = None,
         lead_ids: list[UUID] | None = None,
         campaign_id: UUID | None = None,
+        limit: int | None = None,
     ) -> AgentRun:
         if agent_type not in VALID_AGENT_TYPES:
             raise AppError("UNKNOWN_AGENT", f"Unknown agent type '{agent_type}'.", 400)
@@ -68,6 +69,7 @@ class AgentService:
                 "lead_ids": [str(i) for i in lead_ids],
                 "icp": icp or {},
                 "campaign_id": str(campaign_id) if campaign_id else None,
+                "limit": limit,
             },
         )
         await self.repo.add(run)

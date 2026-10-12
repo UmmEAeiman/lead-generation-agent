@@ -11,6 +11,12 @@ class AgentRunRequest(BaseModel):
     lead_ids: list[uuid.UUID] = Field(default_factory=list)
     campaign_id: uuid.UUID | None = None
     icp: dict[str, Any] | None = None
+    limit: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Max leads to discover/process in this run (discovery/pipeline).",
+    )
 
 
 class QueuedRun(BaseModel):

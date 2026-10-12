@@ -19,6 +19,7 @@ os.environ["EMAIL_API_KEY"] = ""
 os.environ["EMAIL_FINDER_PROVIDER"] = "hunter"
 os.environ["HUNTER_API_KEY"] = ""
 os.environ["ENRICH_API_KEY"] = ""
+os.environ["CONTACT_FINDER_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient

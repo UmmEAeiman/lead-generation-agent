@@ -34,6 +34,7 @@ async def run_agent(
         icp=icp,
         lead_ids=data.lead_ids,
         campaign_id=data.campaign_id,
+        limit=data.limit,
     )
     service.schedule(background_tasks, run.run_id)
     return QueuedRun(run_id=run.run_id, status=run.status)

@@ -96,11 +96,23 @@ Then update:
 
 ---
 
-## 6. Email (Resend)
+## 6. Email sending
 
+Two live providers are supported; set `EMAIL_PROVIDER` to pick one.
+
+**Resend** (`EMAIL_PROVIDER=resend`)
 - Test sender `onboarding@resend.dev` only delivers to the Resend account owner.
 - For real outreach: verify the client's domain in Resend, then set on Render:
   `EMAIL_FROM=leads@clientdomain.com` and keep `EMAIL_PROVIDER=resend`.
+
+**SMTP — free, no domain needed** (`EMAIL_PROVIDER=smtp`)
+- Works with any SMTP relay; needs no domain for a Gmail App Password.
+- Gmail: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USE_TLS=true`,
+  `SMTP_USERNAME=<gmail>`, `SMTP_PASSWORD=<app password>`, `EMAIL_FROM=<gmail>`.
+- Brevo: `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587` (login email + SMTP key).
+- SMTP2GO: `SMTP_HOST=mail.smtp2go.com`, `SMTP_PORT=2525`.
+- Zoho: `SMTP_HOST=smtp.zoho.com`, `SMTP_PORT=465`, `SMTP_USE_SSL=true`.
+- If the SMTP vars are missing the app falls back to `local` (records only).
 
 ---
 
@@ -114,6 +126,18 @@ Then update:
   Costs 10 credits per found email (100 free credits ≈ 10 lookups).
 - Without the matching key, email finding is skipped — the app never invents an
   address. Emails found are stored with confidence `verified` or `unverified`.
+
+## 6c. Free contact discovery (website scrape + Serper search)
+
+- Runs **before** the email finder during enrichment, and needs **no paid API**.
+- **Website scrape** (`CONTACT_FINDER_ENABLED=true`, default): reads the
+  company's own homepage + `/contact` + `/about` + `/team` pages and extracts
+  only emails published there (mailto links = `verified`, plain text =
+  `unverified`). Set `CONTACT_FINDER_MAX_PAGES` / `CONTACT_FINDER_TIMEOUT_SECONDS`.
+- **Serper search**: when `SEARCH_API_KEY` is set, runs a targeted Google query
+  (`"<domain> email"`) and reads emails from the snippets (`unverified`).
+- Only emails on the target domain are kept; nothing is ever invented. If the
+  scrape finds nothing, the configured email finder (Hunter/Enrich) runs next.
 
 ---
 

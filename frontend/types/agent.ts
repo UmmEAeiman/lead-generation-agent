@@ -39,6 +39,7 @@ export interface AgentRunRequest {
   lead_ids?: string[];
   campaign_id?: string | null;
   icp?: IcpInput | null;
+  limit?: number | null;
 }
 
 export interface IcpInput {

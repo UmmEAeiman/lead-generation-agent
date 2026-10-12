@@ -4,6 +4,8 @@ from typing import Any
 
 from app.agents.base import BaseAgent
 from app.agents.results import EnrichmentResult
+from app.integrations.contact_finder.base import ContactFinder, ContactFinderError
+from app.integrations.contact_finder.factory import get_contact_finder
 from app.integrations.email_finder.base import EmailFinderError, EmailFinderProvider
 from app.integrations.email_finder.factory import get_email_finder
 from app.integrations.llm.base import BaseLLMProvider
@@ -31,9 +33,11 @@ class EnrichmentAgent(BaseAgent):
         self,
         llm: BaseLLMProvider | None = None,
         email_finder: EmailFinderProvider | None = None,
+        contact_finder: ContactFinder | None = None,
     ) -> None:
         super().__init__(llm)
         self.email_finder = email_finder or get_email_finder()
+        self.contact_finder = contact_finder or get_contact_finder()
 
     async def run(self, lead: dict[str, Any], context: str = "") -> EnrichmentResult:
         fields = dict(lead)
@@ -57,6 +61,8 @@ class EnrichmentAgent(BaseAgent):
             if normalized:
                 fields["email"] = normalized
                 confidence["email"] = DataConfidence.VERIFIED.value
+        if not fields.get("email"):
+            await self._find_contact(fields, confidence)
         if not fields.get("email"):
             await self._find_email(fields, confidence)
         if not fields.get("industry") and context:
@@ -92,6 +98,65 @@ class EnrichmentAgent(BaseAgent):
             used_llm = True
 
         return EnrichmentResult(fields=fields, field_confidence=confidence, used_llm=used_llm)
+
+    async def _find_contact(self, fields: dict[str, Any], confidence: dict[str, str]) -> None:
+        """Discover a contact from the company's own site / search (free)."""
+        if not self.contact_finder.is_configured:
+            return
+        domain = normalize_domain(str(fields.get("website") or ""))
+        if not domain:
+            return
+        try:
+            contacts = await self.contact_finder.find_contacts(
+                domain=domain,
+                company_name=str(fields.get("company_name") or "") or None,
+                website=str(fields.get("website") or "") or None,
+            )
+        except ContactFinderError:
+            return
+        best = self._best_contact(contacts)
+        if best is None:
+            return
+        normalized = normalize_email(best.email)
+        if not normalized:
+            return
+        fields["email"] = normalized
+        confidence["email"] = best.confidence
+        if best.full_name and not fields.get("contact_name"):
+            fields["contact_name"] = best.full_name
+            confidence["contact_name"] = best.confidence
+        if best.role and not fields.get("contact_role"):
+            fields["contact_role"] = best.role
+            confidence["contact_role"] = best.confidence
+
+    _GENERIC_PREFIXES = (
+        "info",
+        "sales",
+        "contact",
+        "hello",
+        "admin",
+        "support",
+        "office",
+        "team",
+        "enquiries",
+        "inquiry",
+        "mail",
+        "welcome",
+        "help",
+        "billing",
+    )
+
+    @classmethod
+    def _best_contact(cls, contacts: list[Any]) -> Any | None:
+        if not contacts:
+            return None
+
+        def rank(contact: Any) -> tuple[bool, bool]:
+            local = str(contact.email).split("@")[0].lower()
+            generic = any(local.startswith(prefix) for prefix in cls._GENERIC_PREFIXES)
+            return (not generic, contact.confidence == "verified")
+
+        return max(contacts, key=rank)
 
     async def _find_email(self, fields: dict[str, Any], confidence: dict[str, str]) -> None:
         """Look up a contact email via the configured finder (never invent one)."""

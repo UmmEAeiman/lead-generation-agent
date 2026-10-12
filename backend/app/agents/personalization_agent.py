@@ -40,14 +40,25 @@ class PersonalizationAgent(BaseAgent):
     def _fallback_message(
         self, lead: dict[str, Any], pain_points: list[str]
     ) -> PersonalizationResult:
-        """Offline fallback: only company name and industry, no invented facts."""
+        """Offline fallback: only observed fields, no invented facts."""
         company = str(lead.get("company_name") or "your company")
         industry = str(lead.get("industry") or "your industry")
+        name = str(lead.get("contact_name") or "").strip()
+        greeting = f"Hi {name.split()[0]}," if name else "Hi,"
+
+        highlight = ""
+        if pain_points:
+            pain = str(pain_points[0]).strip().rstrip(".")
+            if pain:
+                pain = pain[0].lower() + pain[1:]
+                highlight = f" One challenge that stood out was {pain}."
+
         subject = f"Quick thought for {company}"
         message = (
-            f"Hi,\n\nI came across {company} while researching {industry} businesses "
-            "and wanted to reach out. We help teams in this space keep their outreach "
-            "personal and their pipeline moving without adding manual work.\n\n"
+            f"{greeting}\n\n"
+            f"I came across {company} while researching {industry} businesses and "
+            f"wanted to reach out.{highlight} We help teams in this space turn more "
+            "interest into booked conversations without adding manual work.\n\n"
             "Would you be open to a short conversation this week? If this isn't a "
             "priority right now, just let me know and I'll stop following up."
         )

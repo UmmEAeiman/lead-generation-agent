@@ -33,6 +33,7 @@ interface LaunchFormState {
   location: string;
   companySize: string;
   keywords: string;
+  limit: string;
 }
 
 const INITIAL_FORM: LaunchFormState = {
@@ -42,6 +43,7 @@ const INITIAL_FORM: LaunchFormState = {
   location: "",
   companySize: "",
   keywords: "",
+  limit: "",
 };
 
 function progressPercent(run: AgentRun): number {
@@ -86,9 +88,11 @@ export function AgentsView() {
     };
 
     try {
+      const parsedLimit = Number.parseInt(form.limit, 10);
       const run = await queueRun(form.agentType, {
         campaign_id: form.campaignId || null,
         icp,
+        limit: Number.isFinite(parsedLimit) ? parsedLimit : null,
       });
       setBanner({
         kind: "success",
@@ -184,6 +188,18 @@ export function AgentsView() {
                   setForm((prev) => ({ ...prev, keywords: event.target.value }))
                 }
                 placeholder="funding, hiring (comma-separated)"
+              />
+              <Input
+                label="Leads per run (capacity)"
+                type="number"
+                min={1}
+                max={50}
+                inputMode="numeric"
+                value={form.limit}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, limit: event.target.value }))
+                }
+                placeholder="Default 20 · max 50"
               />
             </div>
             <Button type="submit" loading={launching}>

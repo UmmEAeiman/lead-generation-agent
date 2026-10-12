@@ -80,3 +80,23 @@ def test_run_list_scoped_to_user(authed) -> None:
 
     missing = authed.get("/api/v1/agents/runs/run_does_not_exist")
     assert missing.status_code == 404
+
+
+def test_discovery_respects_manual_limit(authed) -> None:
+    queued = authed.post("/api/v1/agents/discovery/run", json={"icp": ICP, "limit": 2})
+    assert queued.status_code == 202, queued.text
+
+    run = authed.get(f"/api/v1/agents/runs/{queued.json()['run_id']}").json()
+    assert run["status"] == "completed"
+    assert run["output_summary"]["created"] == 2
+
+    leads = authed.get("/api/v1/leads", params={"page_size": 100}).json()
+    assert leads["total"] == 2
+
+
+def test_discovery_limit_validation(authed) -> None:
+    too_small = authed.post("/api/v1/agents/discovery/run", json={"icp": ICP, "limit": 0})
+    assert too_small.status_code == 422
+    too_large = authed.post("/api/v1/agents/discovery/run", json={"icp": ICP, "limit": 51})
+    assert too_large.status_code == 422
+
