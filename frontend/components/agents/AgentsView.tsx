@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
@@ -34,6 +35,7 @@ interface LaunchFormState {
   companySize: string;
   keywords: string;
   limit: string;
+  autoDrafts: boolean;
 }
 
 const INITIAL_FORM: LaunchFormState = {
@@ -44,6 +46,7 @@ const INITIAL_FORM: LaunchFormState = {
   companySize: "",
   keywords: "",
   limit: "",
+  autoDrafts: true,
 };
 
 function progressPercent(run: AgentRun): number {
@@ -93,6 +96,7 @@ export function AgentsView() {
         campaign_id: form.campaignId || null,
         icp,
         limit: Number.isFinite(parsedLimit) ? parsedLimit : null,
+        prepare_outreach: form.agentType === "pipeline" && form.autoDrafts,
       });
       setBanner({
         kind: "success",
@@ -202,6 +206,15 @@ export function AgentsView() {
                 placeholder="Default 20 · max 50"
               />
             </div>
+            {form.agentType === "pipeline" ? (
+              <Checkbox
+                label="Auto-create outreach drafts for qualified leads (still needs approval to send)"
+                checked={form.autoDrafts}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, autoDrafts: event.target.checked }))
+                }
+              />
+            ) : null}
             <Button type="submit" loading={launching}>
               Queue run
             </Button>

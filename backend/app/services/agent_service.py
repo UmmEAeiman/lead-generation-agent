@@ -49,6 +49,7 @@ class AgentService:
         lead_ids: list[UUID] | None = None,
         campaign_id: UUID | None = None,
         limit: int | None = None,
+        prepare_outreach: bool = False,
     ) -> AgentRun:
         if agent_type not in VALID_AGENT_TYPES:
             raise AppError("UNKNOWN_AGENT", f"Unknown agent type '{agent_type}'.", 400)
@@ -70,6 +71,7 @@ class AgentService:
                 "icp": icp or {},
                 "campaign_id": str(campaign_id) if campaign_id else None,
                 "limit": limit,
+                "prepare_outreach": prepare_outreach,
             },
         )
         await self.repo.add(run)

@@ -31,6 +31,7 @@ from app.models.lead import Lead
 from app.repositories.agent_repository import AgentRepository
 from app.repositories.campaign_repository import CampaignRepository
 from app.repositories.lead_repository import LeadRepository
+from app.services.outreach_service import OutreachService
 from app.utils.helpers import compact_summary
 from app.utils.normalization import normalize_domain, normalize_email
 from app.utils.validators import can_transition
@@ -139,6 +140,10 @@ class Orchestrator:
         icp = run.input_summary.get("icp") or {}
         return icp if isinstance(icp, dict) else {}
 
+    @staticmethod
+    def _prepare_outreach(run: AgentRun) -> bool:
+        return bool((run.input_summary or {}).get("prepare_outreach"))
+
     def _limit(self, run: AgentRun) -> int:
         """Manual per-run capacity; falls back to the default discovery limit."""
         try:
@@ -234,6 +239,11 @@ class Orchestrator:
         output["qualified"] = sum(
             1 for lead in leads if lead.status == LeadStatus.QUALIFIED.value
         )
+        if self._prepare_outreach(run):
+            drafts = await OutreachService(self.session).prepare_drafts_for_leads(
+                owner_id, leads
+            )
+            output["outreach_drafts"] = drafts
         return output
 
     async def _execute_single(self, run: AgentRun, agent_type: str) -> dict:

@@ -40,6 +40,7 @@ export interface AgentRunRequest {
   campaign_id?: string | null;
   icp?: IcpInput | null;
   limit?: number | null;
+  prepare_outreach?: boolean;
 }
 
 export interface IcpInput {

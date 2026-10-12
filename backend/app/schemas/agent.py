@@ -17,6 +17,13 @@ class AgentRunRequest(BaseModel):
         le=50,
         description="Max leads to discover/process in this run (discovery/pipeline).",
     )
+    prepare_outreach: bool = Field(
+        default=False,
+        description=(
+            "Pipeline only: after processing, create outreach drafts "
+            "(pending approval) for qualified leads that have an email."
+        ),
+    )
 
 
 class QueuedRun(BaseModel):

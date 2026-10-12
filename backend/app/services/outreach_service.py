@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.integrations.email.factory import get_email_provider
 from app.models.enums import FollowupState, LeadStatus, OutreachStatus
+from app.models.lead import Lead
 from app.models.outreach import Outreach
 from app.repositories.lead_repository import LeadRepository
 from app.repositories.outreach_repository import OutreachRepository
@@ -46,6 +47,40 @@ class OutreachService:
         await self.repo.add(outreach)
         await self.session.commit()
         return outreach
+
+    async def prepare_drafts_for_leads(self, owner_id: UUID, leads: list[Lead]) -> int:
+        """Create pending-approval drafts for eligible leads; return how many.
+
+        Skips leads without an email, opted-out leads, and leads that already
+        have an active draft or a sent message. Sending is never automatic.
+        """
+        created = 0
+        for lead in leads:
+            if not lead.email or lead.status == LeadStatus.DO_NOT_CONTACT.value:
+                continue
+            if not lead.personalized_message:
+                continue
+            latest = await self.repo.latest_for_lead(lead.id, owner_id)
+            if latest is not None and latest.status in {
+                OutreachStatus.PENDING_APPROVAL.value,
+                OutreachStatus.APPROVED.value,
+                OutreachStatus.SENT.value,
+            }:
+                continue
+            outreach = Outreach(
+                lead_id=lead.id,
+                campaign_id=lead.campaign_id,
+                owner_id=owner_id,
+                channel="email",
+                subject=f"Quick thought for {lead.company_name}",
+                body=lead.personalized_message,
+                status=OutreachStatus.PENDING_APPROVAL.value,
+            )
+            await self.repo.add(outreach)
+            created += 1
+        if created:
+            await self.session.commit()
+        return created
 
     async def get(self, owner_id: UUID, outreach_id: UUID) -> Outreach:
         outreach = await self.repo.get_by_id(outreach_id, owner_id)

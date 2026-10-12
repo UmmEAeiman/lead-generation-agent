@@ -100,3 +100,40 @@ def test_discovery_limit_validation(authed) -> None:
     too_large = authed.post("/api/v1/agents/discovery/run", json={"icp": ICP, "limit": 51})
     assert too_large.status_code == 422
 
+
+def test_pipeline_auto_creates_outreach_drafts(authed) -> None:
+    queued = authed.post(
+        "/api/v1/agents/pipeline/run",
+        json={"icp": ICP, "prepare_outreach": True},
+    )
+    assert queued.status_code == 202, queued.text
+    run = authed.get(f"/api/v1/agents/runs/{queued.json()['run_id']}").json()
+    assert run["status"] == "completed"
+    assert run["input_summary"]["prepare_outreach"] is True
+    assert "outreach_drafts" in run["output_summary"]
+
+    leads = authed.get("/api/v1/leads", params={"page_size": 100}).json()["items"]
+    eligible = [
+        lead
+        for lead in leads
+        if lead["email"]
+        and lead["status"] == "QUALIFIED"
+        and lead["personalized_message"]
+    ]
+    assert run["output_summary"]["outreach_drafts"] == len(eligible)
+
+    outreach = authed.get("/api/v1/outreach", params={"page_size": 100}).json()
+    assert outreach["total"] == len(eligible)
+    assert all(item["status"] == "PENDING_APPROVAL" for item in outreach["items"])
+    # Drafts never auto-send: they still require human approval.
+    assert all(item["sent_at"] is None for item in outreach["items"])
+
+
+def test_pipeline_without_flag_creates_no_drafts(authed) -> None:
+    queued = authed.post("/api/v1/agents/pipeline/run", json={"icp": ICP})
+    assert queued.status_code == 202
+    run = authed.get(f"/api/v1/agents/runs/{queued.json()['run_id']}").json()
+    assert run["status"] == "completed"
+    assert "outreach_drafts" not in run["output_summary"]
+    assert authed.get("/api/v1/outreach", params={"page_size": 100}).json()["total"] == 0
+
