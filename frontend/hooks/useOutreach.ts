@@ -11,6 +11,7 @@ export function useOutreach(options: {
   run_id?: string;
   campaign_id?: string;
   page?: number;
+  pageSize?: number;
   pollMs?: number;
 }) {
   return useAsync<Page<Outreach>>(
@@ -21,7 +22,7 @@ export function useOutreach(options: {
         run_id: options.run_id,
         campaign_id: options.campaign_id,
         page: options.page,
-        pageSize: 20,
+        pageSize: options.pageSize ?? 20,
       }),
     [options.status, options.leadId, options.run_id, options.campaign_id, options.page],
     { pollMs: options.pollMs },

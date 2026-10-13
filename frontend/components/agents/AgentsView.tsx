@@ -262,6 +262,13 @@ export function AgentsView() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge tone={meta.tone}>{meta.label}</Badge>
+                        {run.status === "completed" ? (
+                          <Link href={`/dashboard/workspace?run_id=${run.run_id}`}>
+                            <Button variant="ghost" size="sm">
+                              Open in Workspace
+                            </Button>
+                          </Link>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"
