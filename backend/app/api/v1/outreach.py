@@ -16,11 +16,19 @@ async def list_outreach(
     user: CurrentUserDep,
     lead_id: UUID | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
+    run_id: str | None = None,
+    campaign_id: UUID | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> Page[OutreachOut]:
     items, total = await OutreachService(session).list(
-        user.id, lead_id=lead_id, status=status_filter, page=page, page_size=page_size
+        user.id,
+        lead_id=lead_id,
+        status=status_filter,
+        run_id=run_id,
+        campaign_id=campaign_id,
+        page=page,
+        page_size=page_size,
     )
     return Page[OutreachOut](
         items=[OutreachOut.model_validate(item) for item in items],

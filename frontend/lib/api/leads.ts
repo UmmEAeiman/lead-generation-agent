@@ -4,13 +4,15 @@ import type { Lead, LeadCreate, LeadFilters, LeadUpdate } from "@/types/lead";
 
 function queryString(filters: LeadFilters): string {
   const params = new URLSearchParams();
-  const entries: Array<[string, string | number | undefined]> = [
+  const entries: Array<[string, string | number | undefined | string[]]> = [
     ["q", filters.q],
     ["status", filters.status || undefined],
     ["industry", filters.industry],
     ["location", filters.location],
     ["score_min", filters.score_min],
     ["score_max", filters.score_max],
+    ["run_id", filters.run_id],
+    ["campaign_id", filters.campaign_id],
     ["sort", filters.sort],
     ["order", filters.order],
     ["page", filters.page],
@@ -18,6 +20,9 @@ function queryString(filters: LeadFilters): string {
   ];
   for (const [key, value] of entries) {
     if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  if (filters.ids?.length) {
+    filters.ids.forEach((id) => params.append("ids", id));
   }
   const qs = params.toString();
   return qs ? `?${qs}` : "";

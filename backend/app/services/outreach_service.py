@@ -48,7 +48,9 @@ class OutreachService:
         await self.session.commit()
         return outreach
 
-    async def prepare_drafts_for_leads(self, owner_id: UUID, leads: list[Lead]) -> int:
+    async def prepare_drafts_for_leads(
+        self, owner_id: UUID, leads: list[Lead], run_id: str | None = None
+    ) -> int:
         """Create pending-approval drafts for eligible leads; return how many.
 
         Skips leads without an email, opted-out leads, and leads that already
@@ -70,6 +72,7 @@ class OutreachService:
             outreach = Outreach(
                 lead_id=lead.id,
                 campaign_id=lead.campaign_id,
+                run_id=run_id or lead.run_id,
                 owner_id=owner_id,
                 channel="email",
                 subject=f"Quick thought for {lead.company_name}",
@@ -146,11 +149,19 @@ class OutreachService:
         *,
         lead_id: UUID | None = None,
         status: str | None = None,
+        run_id: str | None = None,
+        campaign_id: UUID | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Outreach], int]:
         return await self.repo.list(
-            owner_id, lead_id=lead_id, status=status, page=page, page_size=page_size
+            owner_id,
+            lead_id=lead_id,
+            status=status,
+            run_id=run_id,
+            campaign_id=campaign_id,
+            page=page,
+            page_size=page_size,
         )
 
     async def opt_out(self, owner_id: UUID, lead_id: UUID) -> None:

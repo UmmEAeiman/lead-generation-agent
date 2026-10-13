@@ -55,7 +55,11 @@ class LeadService:
         self.session = session
 
     async def create(
-        self, owner_id: UUID, data: LeadCreate, campaign_id: UUID | None = None
+        self,
+        owner_id: UUID,
+        data: LeadCreate,
+        campaign_id: UUID | None = None,
+        run_id: str | None = None,
     ) -> Lead:
         payload = data.model_dump()
         website = normalize_url(payload.get("website"))
@@ -74,6 +78,7 @@ class LeadService:
         lead = Lead(
             owner_id=owner_id,
             campaign_id=campaign_id,
+            run_id=run_id,
             company_name=payload["company_name"].strip(),
             website=website,
             industry=payload.get("industry"),

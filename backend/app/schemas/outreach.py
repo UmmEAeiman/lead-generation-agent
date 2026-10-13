@@ -18,6 +18,7 @@ class OutreachOut(BaseModel):
     id: uuid.UUID
     lead_id: uuid.UUID
     campaign_id: uuid.UUID | None = None
+    run_id: str | None = None
     owner_id: uuid.UUID
     channel: str
     subject: str | None = None

@@ -50,6 +50,8 @@ export interface Lead {
   buying_signals: string[];
   personalized_message: string | null;
   field_confidence: Record<string, DataConfidence | string>;
+  campaign_id: string | null;
+  run_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,6 +84,9 @@ export interface LeadFilters {
   location?: string;
   score_min?: number;
   score_max?: number;
+  run_id?: string;
+  campaign_id?: string;
+  ids?: string[];
   sort?: string;
   order?: "asc" | "desc";
   page?: number;

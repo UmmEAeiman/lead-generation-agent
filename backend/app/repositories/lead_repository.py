@@ -48,8 +48,13 @@ class LeadRepository:
         location: str | None = None,
         score_min: int | None = None,
         score_max: int | None = None,
+        run_id: str | None = None,
+        campaign_id: UUID | None = None,
+        ids: list[UUID] | None = None,
     ) -> Select:
         stmt = self._owned(owner_id)
+        if ids:
+            stmt = stmt.where(Lead.id.in_(ids))
         if q:
             pattern = f"%{q.strip()}%"
             stmt = stmt.where(
@@ -69,6 +74,10 @@ class LeadRepository:
             stmt = stmt.where(Lead.lead_score >= score_min)
         if score_max is not None:
             stmt = stmt.where(Lead.lead_score <= score_max)
+        if run_id:
+            stmt = stmt.where(Lead.run_id == run_id)
+        if campaign_id:
+            stmt = stmt.where(Lead.campaign_id == campaign_id)
         return stmt
 
     async def list(
@@ -81,6 +90,9 @@ class LeadRepository:
         location: str | None = None,
         score_min: int | None = None,
         score_max: int | None = None,
+        run_id: str | None = None,
+        campaign_id: UUID | None = None,
+        ids: list[UUID] | None = None,
         sort: str = "created_at",
         order: str = "desc",
         page: int = 1,
@@ -94,6 +106,9 @@ class LeadRepository:
             location=location,
             score_min=score_min,
             score_max=score_max,
+            run_id=run_id,
+            campaign_id=campaign_id,
+            ids=ids,
         )
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = int((await self.session.execute(count_stmt)).scalar_one())
@@ -114,6 +129,8 @@ class LeadRepository:
         location: str | None = None,
         score_min: int | None = None,
         score_max: int | None = None,
+        run_id: str | None = None,
+        campaign_id: UUID | None = None,
         sort: str = "created_at",
         order: str = "desc",
         limit: int = 10_000,
@@ -126,6 +143,8 @@ class LeadRepository:
             location=location,
             score_min=score_min,
             score_max=score_max,
+            run_id=run_id,
+            campaign_id=campaign_id,
         )
         column = _SORTABLE.get(sort, Lead.created_at)
         ordered = stmt.order_by(column.desc() if order.lower() == "desc" else column.asc())

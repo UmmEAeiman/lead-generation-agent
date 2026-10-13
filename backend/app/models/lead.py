@@ -21,6 +21,7 @@ class Lead(Base):
     campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    run_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     company_name: Mapped[str] = mapped_column(String(300))
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)

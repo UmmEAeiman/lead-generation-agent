@@ -107,7 +107,8 @@ def test_pipeline_auto_creates_outreach_drafts(authed) -> None:
         json={"icp": ICP, "prepare_outreach": True},
     )
     assert queued.status_code == 202, queued.text
-    run = authed.get(f"/api/v1/agents/runs/{queued.json()['run_id']}").json()
+    run_id = queued.json()["run_id"]
+    run = authed.get(f"/api/v1/agents/runs/{run_id}").json()
     assert run["status"] == "completed"
     assert run["input_summary"]["prepare_outreach"] is True
     assert "outreach_drafts" in run["output_summary"]
@@ -127,6 +128,32 @@ def test_pipeline_auto_creates_outreach_drafts(authed) -> None:
     assert all(item["status"] == "PENDING_APPROVAL" for item in outreach["items"])
     # Drafts never auto-send: they still require human approval.
     assert all(item["sent_at"] is None for item in outreach["items"])
+
+    # Run provenance: every created lead/draft is linked to this run.
+    assert all(lead["run_id"] == run_id for lead in leads)
+    assert all(item["run_id"] == run_id for item in outreach["items"])
+    run_leads = authed.get(
+        "/api/v1/leads", params={"run_id": run_id, "page_size": 100}
+    ).json()
+    assert run_leads["total"] == len(leads)
+    run_outreach = authed.get(
+        "/api/v1/outreach", params={"run_id": run_id, "page_size": 100}
+    ).json()
+    assert run_outreach["total"] == len(eligible)
+
+
+def test_run_link_filter_isolates_runs(authed) -> None:
+    run_id = authed.post(
+        "/api/v1/agents/pipeline/run", json={"icp": ICP}
+    ).json()["run_id"]
+    own = authed.get("/api/v1/leads", params={"run_id": run_id, "page_size": 100}).json()
+    assert own["total"] >= 1
+    assert all(lead["run_id"] == run_id for lead in own["items"])
+
+    foreign = authed.get(
+        "/api/v1/leads", params={"run_id": "no-such-run", "page_size": 100}
+    ).json()
+    assert foreign["total"] == 0
 
 
 def test_pipeline_without_flag_creates_no_drafts(authed) -> None:

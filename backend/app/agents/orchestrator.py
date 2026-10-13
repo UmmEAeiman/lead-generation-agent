@@ -236,12 +236,13 @@ class Orchestrator:
         )
 
         output["processed"] = len(leads)
+        output["lead_ids"] = [str(lead.id) for lead in leads]
         output["qualified"] = sum(
             1 for lead in leads if lead.status == LeadStatus.QUALIFIED.value
         )
         if self._prepare_outreach(run):
             drafts = await OutreachService(self.session).prepare_drafts_for_leads(
-                owner_id, leads
+                owner_id, leads, run_id=run.run_id
             )
             output["outreach_drafts"] = drafts
         return output
@@ -261,13 +262,14 @@ class Orchestrator:
                 "duplicates_skipped": duplicates,
                 "provider": discovery.provider,
                 "used_llm": discovery.used_llm,
+                "lead_ids": [str(lead.id) for lead in created],
             }
 
         leads = await self._target_leads(run)
         if not leads:
             raise AppError("NO_LEADS", "No accessible leads for this run.", 400)
 
-        output: dict = {"processed": 0}
+        output: dict = {"processed": 0, "lead_ids": [str(lead.id) for lead in leads]}
         for index, lead in enumerate(leads, start=1):
             if agent_type == AgentType.ENRICHMENT.value:
                 await self._enrich_lead(lead, icp)
@@ -313,6 +315,7 @@ class Orchestrator:
             lead = Lead(
                 owner_id=owner_id,
                 campaign_id=UUID(str(run.campaign_id)) if run.campaign_id else None,
+                run_id=run.run_id,
                 company_name=str(candidate.get("company_name") or "").strip() or "Unnamed",
                 website=candidate.get("website"),
                 industry=candidate.get("industry"),

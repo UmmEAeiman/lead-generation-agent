@@ -33,6 +33,8 @@ class OutreachRepository:
         *,
         lead_id: UUID | None = None,
         status: str | None = None,
+        run_id: str | None = None,
+        campaign_id: UUID | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Outreach], int]:
@@ -41,6 +43,10 @@ class OutreachRepository:
             stmt = stmt.where(Outreach.lead_id == lead_id)
         if status:
             stmt = stmt.where(Outreach.status == status)
+        if run_id:
+            stmt = stmt.where(Outreach.run_id == run_id)
+        if campaign_id:
+            stmt = stmt.where(Outreach.campaign_id == campaign_id)
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = int((await self.session.execute(count_stmt)).scalar_one())
         stmt = stmt.order_by(Outreach.created_at.desc())

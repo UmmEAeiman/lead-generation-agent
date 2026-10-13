@@ -21,6 +21,7 @@ export interface Outreach {
   sent_at: string | null;
   created_at: string;
   updated_at: string;
+  run_id: string | null;
 }
 
 export interface OutreachPrepareRequest {

@@ -57,6 +57,8 @@ class LeadOut(BaseModel):
 
     id: uuid.UUID
     owner_id: uuid.UUID
+    campaign_id: uuid.UUID | None = None
+    run_id: str | None = None
     company_name: str
     website: str | None = None
     industry: str | None = None

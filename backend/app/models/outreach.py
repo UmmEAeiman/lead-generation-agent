@@ -19,6 +19,7 @@ class Outreach(Base):
     campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    run_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     owner_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )

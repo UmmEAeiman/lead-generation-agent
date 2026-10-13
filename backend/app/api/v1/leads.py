@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
@@ -22,6 +22,9 @@ async def list_leads(
     location: str | None = None,
     score_min: int | None = None,
     score_max: int | None = None,
+    run_id: str | None = None,
+    campaign_id: UUID | None = None,
+    ids: list[UUID] | None = Query(default=None),
     sort: str = "created_at",
     order: str = "desc",
     page: int = Query(default=1, ge=1),
@@ -35,6 +38,9 @@ async def list_leads(
         location=location,
         score_min=score_min,
         score_max=score_max,
+        run_id=run_id,
+        campaign_id=campaign_id,
+        ids=ids,
         sort=sort,
         order=order,
         page=page,
@@ -83,7 +89,7 @@ async def export_leads(
         sort=sort,
         order=order,
     )
-    filename = f"leads-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.csv"
+    filename = f"leads-{datetime.now(UTC):%Y%m%d-%H%M%S}.csv"
     return Response(
         content="\ufeff" + csv_text,
         media_type="text/csv; charset=utf-8",
