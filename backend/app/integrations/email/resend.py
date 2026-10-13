@@ -59,7 +59,17 @@ class ResendEmailProvider(EmailProvider):
             raise EmailProviderError("Resend request failed.") from exc
 
         if response.status_code >= 400:
-            raise EmailProviderError(f"Resend returned HTTP {response.status_code}.")
+            detail = ""
+            try:
+                body = response.json()
+                if isinstance(body, dict):
+                    detail = str(body.get("message") or body.get("error") or "")
+            except ValueError:
+                detail = (response.text or "")[:200]
+            message = f"Resend returned HTTP {response.status_code}."
+            if detail:
+                message = f"{message} {detail}"
+            raise EmailProviderError(message)
 
         data = response.json()
         message_id = data.get("id") if isinstance(data, dict) else None

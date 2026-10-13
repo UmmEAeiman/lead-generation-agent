@@ -94,4 +94,12 @@ class SmtpEmailProvider(EmailProvider):
             return await asyncio.to_thread(self._send_sync, to, subject, body)
         except (smtplib.SMTPException, OSError) as exc:
             logger.warning("SMTP send failed: %s", type(exc).__name__)
-            raise EmailProviderError("SMTP send failed.") from exc
+            raw = getattr(exc, "smtp_error", None)
+            if isinstance(raw, (bytes, bytearray)):
+                detail = raw.decode("utf-8", "replace").strip()
+            else:
+                detail = str(raw or "").strip()
+            message = f"SMTP send failed ({type(exc).__name__})."
+            if detail:
+                message = f"{message} {detail}"[:400]
+            raise EmailProviderError(message) from exc

@@ -131,7 +131,7 @@ class OutreachService:
             )
         except Exception as exc:  # noqa: BLE001 - provider failure becomes a state, not a crash
             outreach.status = OutreachStatus.FAILED.value
-            outreach.error = "Email provider failed to send the message."
+            outreach.error = str(exc)[:500] or "Email provider failed to send the message."
             await self.session.commit()
             raise AppError("SEND_FAILED", "The email could not be sent.", 502) from exc
 
